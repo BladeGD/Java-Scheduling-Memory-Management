@@ -15,7 +15,7 @@ public class scheduler extends Thread{
 	protected static int time = 1; // Timer 
 	protected Proc[] finished; //store finished processes
 	protected static int finishedCounter = 0; //counts finished processes
-	protected static Semaphore s = new Semaphore(1);
+	protected static Semaphore processSemaphore = new Semaphore(1, true);
 
     public static void main(String args[]) throws FileNotFoundException {
 
@@ -51,7 +51,6 @@ public class scheduler extends Thread{
         	pw.println("Time "+time+", Process "+proc.name+", Started");
             
             if(!s.allocateCPU(proc)) {
-            	
             	q1.add(proc);
                 pw.println("Time "+time+", Process "+proc.name+", Paused");
             }
@@ -104,11 +103,11 @@ public class scheduler extends Thread{
     public boolean allocateCPU(Proc p) {
     	pw.println("Time "+time+", Process "+p.name+", Resumed ," + "remaining time" + p.remainderTime);
     	time += p.getQuantumTime();
-    	p.obtainCPU(s); // Giving mutex to p to run 
-        return isProcessFinished(p);
-    }
-    
-    public boolean isProcessFinished(Proc p) {
+		p.setMutex(processSemaphore); // Giving mutex to p to run 
+		return isProcessFinished(p);
+	}
+	public boolean isProcessFinished(Proc p) {
+		
     	if(p.getRemainderTime() == 0) {
 	    	finished[finishedCounter] = p;
 	        finishedCounter++;
@@ -120,8 +119,7 @@ public class scheduler extends Thread{
     	
     	return false;
     }
-    
-    
+
     private static String readFile(String name) {
 		try {
 			BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(name)));

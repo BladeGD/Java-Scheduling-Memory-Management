@@ -10,6 +10,7 @@ public class Proc extends Thread implements Comparable<Proc> {
     protected int waitTime;
     protected Boolean hasCPU;
     protected Boolean isFinished;
+    protected Semaphore schedulerMutex = null;
 
     public static void main(String args[]){
         Proc p = new  Proc("P1", 1, 1, 1, 1, false, false);
@@ -36,19 +37,19 @@ public class Proc extends Thread implements Comparable<Proc> {
         this.start();
     }
     
-    public void obtainCPU(Semaphore mutex) {
-	    	try {
-	    		  mutex.acquire();
-	    		  try {
-	    			setRemainderTime(getRemainderTime()-getQuantumTime());
-	    		  } finally {
-	    		    mutex.release();
-	    		  }
-	    	} 
-	    	catch(InterruptedException ie) {
-	    		  // ...
-	    	}
-    	}
+    public void obtainCPU() {
+        try {
+            schedulerMutex.acquire();
+            try {
+            setRemainderTime(getRemainderTime()-getQuantumTime()); // Process is exectuing
+            } finally {
+            schedulerMutex.release();
+            }
+        } 
+        catch(InterruptedException ie) {
+                // ...
+        }
+    }
     
 
     public Proc(Proc p){
@@ -56,13 +57,23 @@ public class Proc extends Thread implements Comparable<Proc> {
     }
     
     public void run() {
+        while(remainderTime > 0) {
+            while(schedulerMutex != null){
+                obtainCPU();
+            }
+        }   
+        // Break out of loop, thread termination 
+    }
+
+    public void setMutex(Semaphore s){
+        schedulerMutex = s;
     }
     
 
     public void setReadyTime(int input) {
         readyTime = input;
     }
-	
+    
 
     public void setRemainderTime(int input) {
         remainderTime = input;
