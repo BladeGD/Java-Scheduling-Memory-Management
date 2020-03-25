@@ -1,5 +1,3 @@
-import java.util.concurrent.Semaphore;
-
 public class Proc extends Thread implements Comparable<Proc> {
 	protected String name;
     protected int arrivalTime;
@@ -10,11 +8,25 @@ public class Proc extends Thread implements Comparable<Proc> {
     protected int waitTime;
     protected Boolean hasCPU;
     protected Boolean isFinished;
-    protected Semaphore schedulerMutex = null;
 
     public static void main(String args[]){
         Proc p = new  Proc("P1", 1, 1, 1, 1, false, false);
         System.out.println(p);
+        
+        try {
+        	try {
+        		scheduler.mutex.release();
+        	} finally {
+        		scheduler.mutex.acquire();
+        		scheduler.mutex.release();
+        		scheduler.mutex.acquire();
+        		System.out.println("running");
+        	}
+        	
+        }
+        catch(InterruptedException ie) {
+            // ...
+        }
     }
 
     public Proc (String n, int arrT, int rdyT, int brT, int remT, Boolean h, Boolean f){
@@ -38,17 +50,20 @@ public class Proc extends Thread implements Comparable<Proc> {
     }
     
     public void obtainCPU() {
+	    
         try {
-            schedulerMutex.acquire();
+            scheduler.mutex.acquire();
             try {
             setRemainderTime(getRemainderTime()-getQuantumTime()); // Process is exectuing
             } finally {
-            schedulerMutex.release();
+            scheduler.mutex.release();
+            scheduler.schedulerMutex.release();
             }
         } 
         catch(InterruptedException ie) {
                 // ...
         }
+	    
     }
     
 
@@ -57,18 +72,9 @@ public class Proc extends Thread implements Comparable<Proc> {
     }
     
     public void run() {
-        while(remainderTime > 0) {
-            while(schedulerMutex != null){
-                obtainCPU();
-            }
-        }   
+        while(remainderTime > 0) obtainCPU();
         // Break out of loop, thread termination 
     }
-
-    public void setMutex(Semaphore s){
-        schedulerMutex = s;
-    }
-    
 
     public void setReadyTime(int input) {
         readyTime = input;
