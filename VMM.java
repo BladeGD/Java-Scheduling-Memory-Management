@@ -13,12 +13,35 @@ public class VMM extends Thread {
         int memSize = Integer.parseInt(memconfig[0]);
 
         String[] commandFile = readFile("command.txt").split("\n)");
-		command[] commands;
+        
+        VMM v = new VMM();
+		
 		
 		for(String input: commandFile){
+			String[] commands = input.split(" ");
 			
+			//
+			switch (commands[0].toLowerCase()) {
+				case "store": v.memStore(Integer.parseInt(commands[1]),Integer.parseInt(commands[2]));
+				case "release": v.memFree(Integer.parseInt(commands[1]));
+				case "lookup": v.memLookup(Integer.parseInt(commands[1]));
+				default: System.out.println("Command "+commands[0]+" was not recognized");
+			}
 		}
 
+    }
+    
+    //API
+    public void memStore(int variableId, int value) {
+    	
+    }
+    
+    public void memFree(int variableId) {
+    	
+    }
+    
+    public void memLookup(int variableId) {
+    	
     }
 
     private static String readFile(String name) {
