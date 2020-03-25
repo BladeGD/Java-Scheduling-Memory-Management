@@ -1,0 +1,6 @@
+#Eclipse Project
+bin
+.settings
+output.txt
+.classpath
+.project
