@@ -1,3 +1,5 @@
+import java.util.concurrent.Semaphore;
+
 public class Proc extends Thread implements Comparable<Proc> {
 	protected String name;
     protected int arrivalTime;
@@ -8,6 +10,7 @@ public class Proc extends Thread implements Comparable<Proc> {
     protected int waitTime;
     protected Boolean hasCPU;
     protected Boolean isFinished;
+    protected Semaphore mutex = new Semaphore(0); 
 
     public static void main(String args[]){
         Proc p = new  Proc("P1", 1, 1, 1, 1, false, false);
@@ -15,11 +18,11 @@ public class Proc extends Thread implements Comparable<Proc> {
         
         try {
         	try {
-        		scheduler.mutex.release();
+        		p.mutex.release();
         	} finally {
-        		scheduler.mutex.acquire();
-        		scheduler.mutex.release();
-        		scheduler.mutex.acquire();
+        		p.mutex.acquire();
+        		p.mutex.release();
+        		p.mutex.acquire();
         		System.out.println("running");
         	}
         	
@@ -52,11 +55,10 @@ public class Proc extends Thread implements Comparable<Proc> {
     public void obtainCPU() {
 	    
         try {
-            scheduler.mutex.acquire();
+            mutex.acquire();
             try {
             setRemainderTime(getRemainderTime()-getQuantumTime()); // Process is exectuing
             } finally {
-            scheduler.mutex.release();
             scheduler.schedulerMutex.release();
             }
         } 
@@ -114,6 +116,20 @@ public class Proc extends Thread implements Comparable<Proc> {
 
     public int getQuantumTime() {
         return this.quantumTime;
+    }
+    
+   /*
+    public void takeCPUSpot() {
+    	if(scheduler.inCpu[0] != null ) {
+    		scheduler.inCpu[0] = this;
+    	}
+    	else {
+    		scheduler.inCpu[1] = this;
+    	}
+    }
+   */ 
+    public void removeFromCpu() {
+    	
     }
 
     @Override

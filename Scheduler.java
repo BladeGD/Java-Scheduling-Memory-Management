@@ -7,7 +7,7 @@ import java.io.File;
 import java.util.PriorityQueue;
 import java.util.concurrent.Semaphore;
 
-public class scheduler extends Thread{
+public class scheduler extends Thread {
 	
  	protected static PriorityQueue<Proc> q1 = new PriorityQueue<>();// Priority queues to hold processes
  	protected static PriorityQueue<Proc> q2 = new PriorityQueue<>();
@@ -16,7 +16,9 @@ public class scheduler extends Thread{
 	protected Proc[] finished; //store finished processes
 	protected static int finishedCounter = 0; //counts finished processes
 	protected static Semaphore schedulerMutex = new Semaphore(1);
-    protected static Semaphore mutex = new Semaphore(2);
+    protected static Proc[] inCpu = new Proc[2];
+    protected static int lastestInCpu = 0;
+    
 	
     
     public static void main(String args[]) throws FileNotFoundException {
@@ -49,7 +51,25 @@ public class scheduler extends Thread{
 
         for (Proc proc: procs) {
         	
-        	while(proc.arrivalTime > time) time ++; //Fast forward to next arrival time, wasting CPU cycles.....
+        	while(proc.arrivalTime > time) { //Fast forward to next arrival time, wasting CPU cycles.....
+        		if(q1.peek() != null) {
+        			Proc tempProc = q1.poll();
+        			if(!s.allocateCPU(tempProc)) {
+        				q2.add(tempProc);
+        				pw.println("Time "+time+", Process "+proc.name+", Paused");
+        			}
+        		}
+        		else if(q2.peek() != null) {
+        			Proc tempProc = q1.poll();
+        			if(!s.allocateCPU(tempProc)) {
+        				q1.add(tempProc);
+        				pw.println("Time "+time+", Process "+proc.name+", Paused");
+        			}
+        		}
+        		else {
+        			time = proc.arrivalTime;
+        		}
+        	}
         	
         	pw.println("Time "+time+", Process "+proc.name+", Started");
             
@@ -104,15 +124,16 @@ public class scheduler extends Thread{
     public void run() {}
        
     public boolean allocateCPU(Proc p) {
-    	/*
-    	pw.println("Time "+time+", Process "+p.name+", Resumed ," + "remaining time" + p.remainderTime);
-    	time += p.getQuantumTime();
-		p.setMutex(processSemaphore); // Giving mutex to p to run 
-		return isProcessFinished(p);
-		*/
+    	
+    	if(isProcessFinished(p)) {
+    		return true;
+    	}
     	
     	pw.println("Time "+time+", Process "+p.name+", Resumed ," + "remaining time" + p.remainderTime);
     	time += p.getQuantumTime();
+    	
+    	
+    	p.mutex.release();
     	
         try {
            scheduler.schedulerMutex.acquire();  // wait until process is done
@@ -120,7 +141,9 @@ public class scheduler extends Thread{
         catch(InterruptedException ie) {
                 // ...
         }
-		return isProcessFinished(p);
+        
+        return false;
+		
 	}
     
 	public boolean isProcessFinished(Proc p) {
@@ -136,7 +159,10 @@ public class scheduler extends Thread{
     	
     	return false;
     }
-
+	
+	public void pauseToAdd(Proc p) {
+		pw.println("Time "+time+", Process "+inCpu[lastest].name+", Paused");
+	}
     private static String readFile(String name) {
 		try {
 			BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(name)));
