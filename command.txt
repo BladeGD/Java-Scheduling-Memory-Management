@@ -1,0 +1,7 @@
+store 1 2
+store 2 3
+store 3 5
+lookup 1
+release 1
+lookup 3
+release 3
