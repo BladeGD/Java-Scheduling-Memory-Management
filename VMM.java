@@ -5,12 +5,24 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.concurrent.Semaphore;
+import java.util.Random;
 
 public class VMM extends Thread {
 
 	private static int memSize;
 	private static mem[] mainMemory;
 	private static int counter = 0;
+	protected static int commandCounter = 0;
+	protected static Semaphore VMMMutex = new Semaphore(1);
+	private static Proc procRunning;
+	protected static Semaphore procSync = new Semaphore(0);
+	private String[] commandFile;
+	private int nextCommand;
+	private Random rand = new Random();
+	private static int tempTime = 0;
+	private static int swapTime = 0;
+	protected static Boolean isSwap = false;
 
     public static void main (String args[]) throws FileNotFoundException{
 
@@ -50,8 +62,52 @@ public class VMM extends Thread {
 				default: System.out.println("Command "+commands[0]+" was not recognized");
 			}
 		}
-    }
-    
+	}
+	
+	public VMM() {
+		String[] memconfig = readFile("memconfig.txt").split("\\s+");
+		memSize = Integer.parseInt(memconfig[0]);
+		mainMemory = new mem[memSize];
+		nextCommand = 0;
+		commandFile = readFile("command.txt").split("\n");
+	}
+	
+	public void API(Proc p){
+
+		procRunning = p;
+		int result;
+		if(nextCommand < commandFile.length) {
+		String[] commands = commandFile[nextCommand].split(" ");
+		tempTime = generateExecTime();
+		System.out.println(tempTime);
+			
+		switch (commands[0].toLowerCase()) {
+		case "store": 
+			//scheduler.pw.println(memStore(Integer.parseInt(commands[1]),Integer.parseInt(commands[2])));
+			scheduler.pw.println("Clock: " + (scheduler.time * 1000 - tempTime) + ", Process " + p.getProcessName() + ", Store: Variable " + commands[1] + ", Value: " + commands[2]);
+			result = memStore(Integer.parseInt(commands[1]),Integer.parseInt(commands[2]));
+			//System.out.println("here");
+			break;
+		case "release": 
+			//scheduler.pw.println(memFree(Integer.parseInt(commands[1])));
+			scheduler.pw.println("Clock: " + (scheduler.time * 1000 - tempTime) + ", Process " + p.getProcessName() + ", Release: Variable " + commands [1]);
+			result = memFree(Integer.parseInt(commands[1]));
+			if(result == -1) {
+				scheduler.pw.println("Release Attempt Failed, " + commands[1] + " not found.");
+			}
+			break;
+		case "lookup": 
+			//scheduler.pw.println(memLookup(Integer.parseInt(commands[1])));
+			scheduler.pw.println("Clock: " + (scheduler.time * 1000 - tempTime) + ", Process " + p.getProcessName() + ", Lookup: Variable " + commands [1] + ", Value: " + memLookup(Integer.parseInt(commands[1])));
+			break;
+		default: scheduler.pw.println("Command "+commands[0]+" was not recognized");
+		}
+		}
+		
+		nextCommand++;
+		procSync.release();
+	}
+
     //API
     public int memStore(int variableId, int value) {
 
@@ -95,7 +151,9 @@ public class VMM extends Thread {
 					tempMem.add(swapMem); //add swapped page to VM arraylist
 					tempMem.remove(tempMem1.indexOf(m)); // remove lookup from disk
 					toVM(tempMem); //writes back to disk
-					System.out.println("Time " + scheduler.time + " Memory Manager, Swap: Variable " + swapMem.getID() +" with Variable " + m.getID());
+					isSwap = true;
+					swapTime = ( rand.nextInt(500));
+					scheduler.pw.println("Clock: " +(scheduler.time * 1000 - swapTime) + " Memory Manager, Swap: Variable " + swapMem.getID() +" with Variable " + m.getID());
 					return mainMemory[index].getVal();
 				}
 			}
@@ -104,7 +162,6 @@ public class VMM extends Thread {
 		mem newMem = new mem(variableId, value, scheduler.time); // doesn't exist 
 
 		if(counter < memSize){
-			System.out.println("here");
 			index = emptyFrame();
 			mainMemory[index] = newMem;
 			counter++;
@@ -116,13 +173,15 @@ public class VMM extends Thread {
 			mainMemory[index] = newMem; //overwrites page in MM
 			tempMem.add(swapMem); //add swapped page to VM arraylist
 			toVM(tempMem); //writes back to disk
-			System.out.println("Time " + scheduler.time + " Memory Manager, Swap: Variable " + swapMem.getID() +" with Variable " + newMem.getID());
+			isSwap = true;
+			swapTime = (rand.nextInt(500));
+			scheduler.pw.println("Clock: " + (scheduler.time * 1000 - swapTime) + " Memory Manager, Swap: Variable " + swapMem.getID() +" with Variable " + newMem.getID());
 			return mainMemory[index].getVal();
 		}
     }
     
 	public int memFree(int variableId) { //delete
-
+		
 		//if in MM
 		//if in VM
 			//swap to MM then release
@@ -134,7 +193,17 @@ public class VMM extends Thread {
 				return 1; //returns 1 if successful
 			}
 		}
-
+		
+		ArrayList<mem> tempMem1 = fromVM();
+		ArrayList<mem> tempMem = tempMem1;
+	
+		for (mem m: tempMem1) {
+			if(m.getID() == variableId) {
+				tempMem.remove(tempMem1.indexOf(m));
+				toVM(tempMem);
+				return 1;
+			}
+		}
 		return -1;
     }
     
@@ -175,7 +244,9 @@ public class VMM extends Thread {
 					tempMem.add(swapMem);//add faulted page to VM arraylist
 					tempMem.remove(tempMem1.indexOf(m)); // remove lookup from disk
 					toVM(tempMem);//writes back to disk
-					System.out.println("Time " + scheduler.time + " Memory Manager, Swap: Variable " + swapMem.getID() +" with Variable " + m.getID());
+					isSwap = true;
+					swapTime = (rand.nextInt(500));
+					scheduler.pw.println("Clock: " + ( scheduler.time * 1000 - swapTime) + " Memory Manager, Swap: Variable " + swapMem.getID() +" with Variable " + m.getID());
 					return mainMemory[index].getVal();
 				}
 			}
@@ -228,7 +299,7 @@ public class VMM extends Thread {
 		int index = 0;
 		for(int i = 1; i < memSize; i++){
 			
-			if(mainMemory[i].getAge() > mainMemory[i-1].getAge()) index = i;
+			if(mainMemory[i].getAge() < mainMemory[i-1].getAge()) index = i;
 			
 		} 
 		return index;
@@ -242,6 +313,26 @@ public class VMM extends Thread {
 			}
 		}
 		return -1;
+	}
+	
+	// if counter is even generate between 0-500
+				// if counter is odd generate between 501-989 
+				// for swap, always do tempTime - 10
+	public int generateExecTime() {
+    	if((commandCounter % 2) == 0) {
+    		swapTime = 0;
+    		return (rand.nextInt(499) + 500);
+    	}
+    	else {
+    		if(isSwap) {
+    			isSwap = false;
+    			return swapTime -= 10;
+    		}
+    		else {
+    			return rand.nextInt(500);
+    		}
+    		
+    	}
 	}
 
     private static String readFile(String name) {
