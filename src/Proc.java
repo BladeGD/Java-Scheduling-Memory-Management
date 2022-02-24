@@ -1,68 +1,81 @@
+//Driver is in Scheduler.java
+
 import java.util.concurrent.Semaphore;
 
 public class Proc extends Thread implements Comparable<Proc> {
-	protected String name;
+	
+    protected String name;
+    protected int proc_id;
     protected int arrivalTime;
-    protected int readyTime;
-    protected int burstTime;
+    protected int entryTime;
     protected int remainderTime;
     protected int quantumTime;
-    protected int waitTime;
-    protected Boolean hasCPU;
-    protected Boolean isFinished;
+    protected int exitTime;
+    protected Semaphore schedulerSync = new Semaphore(0);
+    protected static Semaphore VMMMutex = new Semaphore(1);
+    protected static VMM vmm = new VMM();
+    protected Semaphore procSync = new Semaphore(0);
 
-    public static void main(String args[]){
-        Proc p = new  Proc("P1", 1, 1, 1, 1, false, false);
-        System.out.println(p);
-    }
-
-    public Proc (String n, int arrT, int rdyT, int brT, int remT, Boolean h, Boolean f){
+    public Proc (String n, int id, int arrT, int remT){
         name = n;
+        proc_id = id;
         arrivalTime = arrT;
-        readyTime = rdyT;
-        burstTime = brT;
+        entryTime = arrT;
         remainderTime = remT;
-        waitTime = 0;
         if (remT*0.1 > 1) {
             quantumTime = (int) Math.ceil(remT*0.1);
         } 
         else {
             quantumTime = 1;
         }
-        hasCPU = h;
-        isFinished = f;
 		
       //Launch Thread
         this.start();
     }
-    
-    public void obtainCPU(Semaphore mutex) {
-	    	try {
-	    		  mutex.acquire();
-	    		  try {
-	    			setRemainderTime(getRemainderTime()-getQuantumTime());
-	    		  } finally {
-	    		    mutex.release();
-	    		  }
-	    	} 
-	    	catch(InterruptedException ie) {
-	    		  // ...
-	    	}
-    	}
-    
-
-    public Proc(Proc p){
-        this(p.name, p.arrivalTime, p.readyTime, p.burstTime, p.remainderTime, p.hasCPU, p.isFinished);
+  
+    public void obtainCPU() {
+	    
+        try {
+        	schedulerSync.acquire();
+        	
+            //System.out.println("here !");
+            while( VMM.commandCounter < 2 ) { // race condition 
+                try {
+                    VMMMutex.acquire();
+                } finally {
+                	if(VMM.commandCounter < 2) { // cheap solution to fix race condition 
+	                    VMM.procRunning = this;
+	                    vmm.API(); // Run API
+	                    VMM.procSync.acquire(); // wait until API is done
+	                    
+	                    VMM.commandCounter ++;
+                	}
+                	 VMMMutex.release(); //Tell other processes we are done with VMM
+                }
+            }
+            procSync.release(); // Tell scheduler we are done
+        } 
+        catch(InterruptedException e) {
+        	e.printStackTrace();
+        }
+	    
     }
     
     public void run() {
+        while(remainderTime > 0) obtainCPU();
+        
+     // Break out of loop, thread termination
+        try {
+			this.join();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
     }
-    
 
-    public void setReadyTime(int input) {
-        readyTime = input;
+    public void setEntryTime(int input) {
+        entryTime = input;
     }
-	
 
     public void setRemainderTime(int input) {
         remainderTime = input;
@@ -71,7 +84,7 @@ public class Proc extends Thread implements Comparable<Proc> {
 
     public void setQuantumTime() {
         if (remainderTime*0.1 > 1) {
-            double qT = (double)remainderTime *0.1;
+            double qT = (double)remainderTime * 0.1;
             quantumTime = (int)(Math.ceil(qT));
         } 
         else {
@@ -79,16 +92,24 @@ public class Proc extends Thread implements Comparable<Proc> {
         }
     }
 
+    public void setExitTime(int input) {
+        exitTime = input;
+    }
+
     public String getProcessName() {
         return this.name;
+    }
+
+    public int getProcessID(){
+        return this.proc_id;
     }
 
     public int getArrivalTime() {
         return this.arrivalTime;
     }
 
-    public int getReadyTime() {
-        return this.readyTime;
+    public int getEntryTime() {
+        return this.entryTime;
     }
 
     public int getRemainderTime() {
@@ -99,21 +120,24 @@ public class Proc extends Thread implements Comparable<Proc> {
         return this.quantumTime;
     }
 
+    public int getExitTime(){
+        return this.exitTime;
+    }
+
     @Override
     public int compareTo(Proc x) {
-
-        if (this.remainderTime != x.getRemainderTime()) {
-            return Integer.compare(this.getRemainderTime(), x.getRemainderTime());
+        if (this.entryTime != x.getEntryTime()){
+            return this.entryTime- x.getEntryTime();
         }
         else {
-            return Integer.compare(this.getArrivalTime(), x.getArrivalTime());
+            return this.proc_id - x.getProcessID();
         }
     }
 
     
     @Override
     public String toString() {
-        return String.format("Name: %s\n arrivalTime: %d\n readyTime: %d\n burstTime: %d\n remainderTime: %d\n hasCPU: %s\n isFinished: %s\n", 
-            name, arrivalTime, readyTime, burstTime, remainderTime, String.valueOf(hasCPU), String.valueOf(isFinished));
+        return String.format("Name: %s\n arrivalTime: %d\n remainderTime: %d\n exitTime: %d\n", 
+            name, arrivalTime, remainderTime, exitTime);
     }
 }

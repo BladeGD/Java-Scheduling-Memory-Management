@@ -1,3 +1,5 @@
+//Driver is HERE!!!
+
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -5,123 +7,168 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.File;
 import java.util.PriorityQueue;
-import java.util.concurrent.Semaphore;
+import java.util.ArrayList;
 
 public class scheduler extends Thread{
-	
- 	protected static PriorityQueue<Proc> q1 = new PriorityQueue<>();// Priority queues to hold processes
- 	protected static PriorityQueue<Proc> q2 = new PriorityQueue<>();
+
+	protected static final int numberOfCpu = 2;
+ 	protected static PriorityQueue<Proc> q1 = new PriorityQueue<>();// Priority queues to hold processes (FIFO)
  	protected static PrintWriter pw; //Create output.txt File
 	protected static int time = 1; // Timer 
-	protected Proc[] finished; //store finished processes
+	protected static Proc[] finished; //store finished processes
 	protected static int finishedCounter = 0; //counts finished processes
-	protected static Semaphore s = new Semaphore(1);
-
-    public static void main(String args[]) throws FileNotFoundException {
+	protected static Proc[] inCpu = new Proc[numberOfCpu];
+	protected static int inCpuCounter = 0;
+	protected static int size;
+	protected static ArrayList<Proc> procs;
+	
+    public static void main(String args[]) throws FileNotFoundException { //Driver class
 
     	 //Read file into a String Builder
         String[] number = readFile("input.txt").split("\\s+");
-        int size = number.length/2;
+        int size = Integer.parseInt(number[0]);
         
-        scheduler s = new scheduler(size); // Initialize scheduler to create two queues and mutex 
-
-        //Convert String Builder to Proc Objects
-        Proc[] procs = new Proc[number.length/2];
-        for (int i = 0; i < procs.length; i++){
-            procs[i] = new Proc(
-                "P"+ Integer.toString(i+1), 
-                Integer.parseInt(number[2 * i]), 
-                Integer.parseInt(number[2 * i]), 
-                Integer.parseInt(number[2 * i + 1]), 
-                Integer.parseInt(number[2 * i + 1]), 
-                false, 
-                false);
-        }
+        ArrayList<Proc> procs = new ArrayList<Proc>();
+		for (int i = 0; i < size; i++){
+            procs.add( new Proc(
+				"P" + Integer.toString(i + 1), 
+				i+1,
+                Integer.parseInt(number[2 * i + 1]),  
+                Integer.parseInt(number[2 * i + 2])));
+		}
+		
         
-        Proc thisProc;
+        VMM vmm = new VMM();
+        scheduler s = new scheduler(size, procs); // Initialize scheduler to create two queues 
         
-        while(procs[0].getArrivalTime() < time) { //Fast forward to first arrival time
-    		time++;
-    	}
-
-        for (Proc proc: procs) {
-        	
-        	while(proc.arrivalTime > time) time ++; //Fast forward to next arrival time, wasting CPU cycles.....
-        	
-        	pw.println("Time "+time+", Process "+proc.name+", Started");
-            
-            if(!s.allocateCPU(proc)) {
-            	
-            	q1.add(proc);
-                pw.println("Time "+time+", Process "+proc.name+", Paused");
-            }
-        }
-        
-
-       while(finishedCounter != size) {
-
-            while(q1.peek() != null) {
-            	thisProc = q1.poll();
-            	if(!s.allocateCPU(thisProc)) {
-            		q2.add(thisProc);
-                    pw.println("Time "+time+", Process "+thisProc.name+", Paused");
-            	}
-            }
-            
-            while(q2.peek() != null) {
-            	thisProc = q2.poll();
-            	if(!s.allocateCPU(thisProc)) {
-            		q1.add(thisProc);
-                    pw.println("Time "+time+", Process "+thisProc.name+", Paused");
-            	}
-            }
-        }
-       
-       pw.println("------------------------------");
-       pw.println("Waiting Times:");
-       
-       for(Proc proc : s.finished) {
-    	   pw.println("Process " + proc.name +": " + proc.waitTime);
-       }
-
-        //Write to File and close streams
-        pw.flush();
-        pw.close();
+       pw.flush();
+       pw.close();
+       System.exit(0);
     }
         
-    public scheduler(int size) {
-    	finished = new Proc[size];
+    public scheduler(int s, ArrayList<Proc> p) {
+    	
+    	size = s;
+    	procs = p;
+    	
+		for (Proc proc: procs) {
+			q1.add(proc);
+	    }
+    	
     	try {
 			pw = new PrintWriter(new File("./output.txt"));
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		}
+    	
     	start();
+    	
+    	try {
+			join();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
     }
 
-    public void run() {}
+    public void run() {
+    	
+    	Proc thisProc;
+    	
+    	while(finishedCounter != size) {
+    		
+    		
+    		VMM.commandCounter = 0; //Reset commandCounter back to zero. (Ensure that only 2 commands are run in one iteration)
+
+    		//if inCpu is not empty
+    			//update all process in cpu : --remaindertime
+    				//if any hits 0 then remove and put in finish array
+    				//if any hits exitTime then put in ready queue (exitTime == time?)
+
+    		if(inCpuCounter > 0){
+    			
+    			for(int i = 0; i < numberOfCpu; i++) {// wait until all processes are done
+    				if(inCpu[i] != null){
+    					try {
+    						inCpu[i].procSync.acquire();
+    					} catch (InterruptedException e) {
+    						// TODO Auto-generated catch block
+    						e.printStackTrace();
+    					}
+    				}
+    			}
+    			
+    			for(int i = 0 ; i < numberOfCpu ; i++){ //Check if proc is done 
+    				if(inCpu[i] != null){
+    					inCpu[i].remainderTime -=  1;
+    					if(inCpu[i].exitTime == time){
+    						if(inCpu[i].remainderTime == 0){ // if done remove from queue
+    							pw.println("Clock: "+time * 1000+", Process "+inCpu[i].name+", Finished");
+    							finishedCounter ++;
+    							inCpu[i] = null;
+    							inCpuCounter--;
+    						}
+    						else{ // not done remove from queue
+    							inCpu[i].setEntryTime(time);
+    							q1.add(inCpu[i]);
+    							pw.println("Clock: "+time * 1000+", Process "+inCpu[i].name+", Paused.");
+    							inCpu[i] = null;
+    							inCpuCounter--;
+    						}
+    					
+    					}
+    					else { // if exit time is not done release that process' semaphore
+    						inCpu[i].schedulerSync.release();
+    					}
+    					
+    				}
+    			}
+    		}
+    		//if in cpu has empty slot
+    			//check if we can add a process from the ready queue
+    				//add the process
+    					//define its exit time (now + quantum time)
+    		
+    		while(inCpuCounter < numberOfCpu && q1.peek() != null) {
+    			//System.out.println("here");
+    			if(q1.peek().getEntryTime() <= time){
+    				//System.out.println("here too");
+    				thisProc = q1.poll();
+    				allocateCPU(thisProc);
+    				inCpuCounter++;
+    			}
+    			else {
+    				break;
+    			}
+    			
+    		}
+    		
+    		time += 1;
+    		
+           }
+    }
        
     public boolean allocateCPU(Proc p) {
-    	pw.println("Time "+time+", Process "+p.name+", Resumed ," + "remaining time" + p.remainderTime);
-    	time += p.getQuantumTime();
-    	p.obtainCPU(s); // Giving mutex to p to run 
-        return isProcessFinished(p);
-    }
-    
-    public boolean isProcessFinished(Proc p) {
-    	if(p.getRemainderTime() == 0) {
-	    	finished[finishedCounter] = p;
-	        finishedCounter++;
-	        p.waitTime = time - p.burstTime - p.arrivalTime;
-	        pw.println("Time "+time+", Process "+p.name+", Paused");
-	        pw.println("Time "+time+", Process "+p.name+", Finished");
-	        return true;
-    	}
-    	
-    	return false;
-    }
-    
-    
+
+		for(int i = 0 ; i < numberOfCpu ; i++){
+			if(inCpu[i] == null){
+				inCpu[i] = p;
+				inCpu[i].setExitTime(time + inCpu[i].getQuantumTime());
+				if(inCpu[i].getArrivalTime() == inCpu[i].getEntryTime()){
+					pw.println("Clock: "+time * 1000+", Process "+inCpu[i].name+", Started.");
+				}
+				pw.println("Clock: "+time * 1000 +", Process "+inCpu[i].name+", Resumed.");
+				//execute a command
+				break;
+			}
+		}
+	
+		
+		p.schedulerSync.release();
+			
+        
+        return false;	
+	}
+
     private static String readFile(String name) {
 		try {
 			BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(name)));
@@ -140,3 +187,5 @@ public class scheduler extends Thread{
     }
     
 }
+
+

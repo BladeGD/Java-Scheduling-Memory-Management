@@ -1,0 +1,23 @@
+Clock: 1000, Process P2, Started.
+Clock: 1000, Process P2, Resumed.
+Clock: 1121, Process P2, Store: Variable 1, Value: 5
+Clock: 1851, Process P2, Store: Variable 2, Value: 3
+Clock: 2000, Process P2, Paused.
+Clock: 2000, Process P1, Started.
+Clock: 2000, Process P1, Resumed.
+Clock: 2000, Process P2, Resumed.
+Clock: 2453, Process P1, Store: Variable 3, Value: 7
+Clock: 2781 Memory Manager, Swap: Variable 1 with Variable 3
+Clock: 2791, Process P1, Lookup: Variable 3, Value: 7
+Clock: 3000, Process P1, Finished
+Clock: 3000, Process P2, Finished
+Clock: 3000, Process P3, Started.
+Clock: 3000, Process P3, Resumed.
+Clock: 3225, Process P3, Lookup: Variable 2, Value: 3
+Clock: 3720, Process P3, Release: Variable 1
+Clock: 4000, Process P3, Paused.
+Clock: 4000, Process P3, Resumed.
+Clock: 4248, Process P3, Store: Variable 1, Value: 8
+Clock: 4682 Memory Manager, Swap: Variable 2 with Variable 1
+Clock: 4692, Process P3, Lookup: Variable 1, Value: 8
+Clock: 5000, Process P3, Finished
